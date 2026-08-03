@@ -119,6 +119,33 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
+// ROOT ROUTE FOR HEALTH CHECKS (FIX)
+// ==========================================
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Progress Backend API',
+    version: '1.0.0',
+    endpoints: {
+      test: '/api/test',
+      health: '/api/health',
+      auth: '/api/auth',
+      students: '/api/students',
+      payments: '/api/payments',
+      receipts: '/api/receipts',
+      credentials: '/api/credentials'
+    },
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Handle HEAD requests (used by Render health checks)
+app.head('/', (req, res) => {
+  res.status(200).end();
+});
+
+// ==========================================
 // TEST ROUTES
 // ==========================================
 app.get('/api/test', (req, res) => {
