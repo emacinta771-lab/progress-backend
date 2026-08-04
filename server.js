@@ -92,8 +92,25 @@ const PORT = process.env.PORT || 5000;
 // ==========================================
 // MIDDLEWARE
 // ==========================================
+// Allowed frontend origins (local dev + deployed Vercel apps)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://progress-xi-three.vercel.app',
+  'https://sms-school.vercel.app',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [])
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (e.g., mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`🚫 Blocked CORS origin: ${origin}`);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
