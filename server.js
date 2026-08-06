@@ -25,6 +25,7 @@ try {
   console.log('✅ Receipt routes loaded');
 } catch (e) {
   console.log('⚠️ Receipts route not found, skipping...');
+  console.error(e);
   receiptRoutes = null;
 }
 

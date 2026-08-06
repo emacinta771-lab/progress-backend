@@ -8,7 +8,12 @@ const https = require('https');
 const http = require('http');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { createWorker } = require('tesseract.js');
-const OpenAI = require('openai').default;
+let OpenAI = null;
+try {
+  OpenAI = require('openai').default;
+} catch (e) {
+  console.warn('⚠️ OpenAI package not installed. AI receipt analysis will be disabled.');
+}
 const pool = require('../config/database');
 const { s3Client, bucketName, isCloudflareConfigured, getPublicUrl, generateFileName } = require('../config/cloudflare');
 
