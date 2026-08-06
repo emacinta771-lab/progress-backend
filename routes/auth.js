@@ -149,96 +149,6 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // ==========================================
-    // FALLBACK: Test users for development
-    // ==========================================
-    console.log('📝 Using test users (no database record found)');
-    
-    const testUsers = [
-      {
-        username: 'admin',
-        password: 'Admin@123',
-        role: 'admin',
-        first_name: 'System',
-        last_name: 'Administrator',
-        email: 'admin@school.com',
-        redirect: '/admin-dashboard'
-      },
-      {
-        username: 'teacher',
-        password: 'Teacher@123',
-        role: 'teacher',
-        first_name: 'John',
-        last_name: 'Teacher',
-        email: 'teacher@school.com',
-        redirect: '/teacher-dashboard'
-      },
-      {
-        username: 'accountant',
-        password: 'Accountant@123',
-        role: 'accountant',
-        first_name: 'Mary',
-        last_name: 'Accountant',
-        email: 'accountant@school.com',
-        redirect: '/accountant-dashboard'
-      },
-      {
-        username: 'ST-001',
-        password: 'Student@123',
-        role: 'student',
-        first_name: 'Test',
-        last_name: 'Student',
-        email: 'student@school.com',
-        redirect: '/student-dashboard',
-        is_student: true
-      },
-      {
-        username: 'STD-2024-001',
-        password: 'Student@123',
-        role: 'student',
-        first_name: 'Chisomo',
-        last_name: 'Banda',
-        email: 'chisomo@school.com',
-        redirect: '/student-dashboard',
-        is_student: true
-      },
-      {
-        username: 'PROG4001',
-        password: 'Student@123',
-        role: 'student',
-        first_name: 'PROG',
-        last_name: 'Student',
-        email: 'prog@school.com',
-        redirect: '/student-dashboard',
-        is_student: true
-      }
-    ];
-    
-    const testUser = testUsers.find(u => u.username === username);
-    
-    if (testUser && password === testUser.password) {
-      console.log('✅ Test login successful for:', username);
-      console.log('👤 Role:', testUser.role);
-      
-      return res.json({
-        success: true,
-        message: 'Login successful',
-        token: 'test-token-' + Date.now(),
-        user: {
-          id: Date.now(),
-          username: testUser.username,
-          email: testUser.email,
-          first_name: testUser.first_name,
-          last_name: testUser.last_name,
-          role: testUser.role,
-          is_student: testUser.is_student || false,
-          student_id: null,
-          is_parent: false
-        },
-        redirect: testUser.redirect
-      });
-    }
-    
     console.log('❌ Login failed for:', username);
     return res.status(401).json({
       success: false,
@@ -317,7 +227,7 @@ router.get('/users', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, username, email, first_name, last_name, role, 
-              is_active, is_student, student_id, is_parent,
+              is_active, is_student, student_id, is_parent, password_plain,
               created_at, last_login 
        FROM users 
        ORDER BY created_at DESC`
@@ -369,10 +279,10 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, salt);
     
     const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash, first_name, last_name, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (username, email, password_hash, password_plain, first_name, last_name, role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, username, email, first_name, last_name, role, is_active, created_at`,
-      [username, email, password_hash, first_name, last_name, role || 'teacher']
+      [username, email, password_hash, password, first_name, last_name, role || 'teacher']
     );
     
     console.log('✅ User created successfully:', result.rows[0]);
@@ -656,10 +566,10 @@ router.post('/create-teacher-account', async (req, res) => {
     const password_hash = await bcrypt.hash(password, salt);
 
     const userResult = await pool.query(
-      `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_student, phone, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO users (username, email, password_hash, password_plain, first_name, last_name, role, is_student, phone, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, username, email, first_name, last_name, role, is_student`,
-      [finalUsername, finalEmail, password_hash, teacher.first_name, teacher.last_name, 'teacher', false, teacher.phone || null, true]
+      [finalUsername, finalEmail, password_hash, password, teacher.first_name, teacher.last_name, 'teacher', false, teacher.phone || null, true]
     );
 
     await pool.query(
@@ -1129,8 +1039,8 @@ router.post('/change-password', async (req, res) => {
     const password_hash = await bcrypt.hash(newPassword, salt);
     
     await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-      [password_hash, decoded.id]
+      'UPDATE users SET password_hash = $1, password_plain = $2, updated_at = NOW() WHERE id = $3',
+      [password_hash, newPassword, decoded.id]
     );
     
     // Update credentials if student
@@ -1172,7 +1082,7 @@ router.get('/users/:id', async (req, res) => {
     const result = await pool.query(
       `SELECT id, username, email, first_name, last_name, role, 
               is_active, is_student, student_id, is_parent, parent_id,
-              phone, created_at, last_login 
+              phone, password_plain, created_at, last_login 
        FROM users WHERE id = $1`,
       [userId]
     );

@@ -122,6 +122,7 @@ pool.connect((err, client, release) => {
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`),
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_parent BOOLEAN DEFAULT FALSE`),
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_id INTEGER`),
+          client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_plain VARCHAR(255)`),
           client.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS user_id INTEGER`),
           client.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_email VARCHAR(255)`),
           client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS user_id INTEGER`)
