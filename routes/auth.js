@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const { buildStudentAccountIdentity } = require('../utils/accountIdentity');
+const { verifyPassword } = require('../utils/password');
 
 // ==========================================
 // TEST ROUTE
@@ -92,13 +93,22 @@ router.post('/login', async (req, res) => {
         });
       }
       
-      const isValid = await bcrypt.compare(password, user.password_hash);
-      if (!isValid) {
+      const passwordCheck = await verifyPassword(password, user);
+      if (!passwordCheck.valid) {
         console.log('❌ Invalid password for user:', user.username);
         return res.status(401).json({
           success: false,
           error: 'Invalid credentials'
         });
+      }
+
+      if (passwordCheck.needsRehash && user.password_hash) {
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(password, salt);
+        await pool.query(
+          'UPDATE users SET password_hash = $1, password_plain = $2, updated_at = NOW() WHERE id = $3',
+          [newHash, password, user.id]
+        );
       }
       
       await pool.query(

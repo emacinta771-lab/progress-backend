@@ -1,5 +1,11 @@
 const jwt = require('jsonwebtoken');
 
+// Consistent JWT secret used across login (auth.js), profile (/auth/me),
+// and this middleware. Without a fallback here, tokens signed by the login
+// route (which uses a fallback) would fail verification when JWT_SECRET is
+// not set, causing valid accounts to appear "invalid".
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
 // ==========================================
 // VERIFY JWT TOKEN
 // ==========================================
@@ -14,7 +20,7 @@ const verifyToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch (error) {
