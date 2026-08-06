@@ -296,6 +296,11 @@ router.post('/register', async (req, res) => {
        RETURNING id, username, email, first_name, last_name, role, is_active, created_at`,
       [username, email, password_hash, password, first_name, last_name, normalizedRole]
     );
+
+    await pool.query(
+      'UPDATE users SET password_plain = $1 WHERE id = $2',
+      [password, result.rows[0].id]
+    );
     
     console.log('✅ User created successfully:', result.rows[0]);
     
@@ -1125,16 +1130,25 @@ router.put('/users/:id', async (req, res) => {
   
   try {
     const userId = parseInt(req.params.id);
-    const { first_name, last_name, email, phone, role } = req.body;
-    
-    const result = await pool.query(
-      `UPDATE users 
+    const { first_name, last_name, email, phone, role, password } = req.body;
+    const normalizedRole = normalizeUserRole(role);
+
+    let updateQuery = `UPDATE users 
        SET first_name = $1, last_name = $2, email = $3, 
-           phone = $4, role = $5, updated_at = NOW()
-       WHERE id = $6
-       RETURNING id, username, email, first_name, last_name, role, is_active`,
-      [first_name, last_name, email, phone, role, userId]
-    );
+           phone = $4, role = $5, updated_at = NOW()`;
+    const params = [first_name, last_name, email, phone, normalizedRole];
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      const password_hash = await bcrypt.hash(password, salt);
+      updateQuery += `, password_hash = $${params.length + 1}, password_plain = $${params.length + 2}`;
+      params.push(password_hash, password);
+    }
+
+    updateQuery += ` WHERE id = $${params.length + 1} RETURNING id, username, email, first_name, last_name, role, is_active, password_plain`;
+    params.push(userId);
+    
+    const result = await pool.query(updateQuery, params);
     
     if (result.rows.length === 0) {
       return res.status(404).json({
