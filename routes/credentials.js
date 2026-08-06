@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
+const { buildStudentAccountIdentity } = require('../utils/accountIdentity');
 
 // ==========================================
 // GET ALL STUDENT CREDENTIALS
@@ -124,8 +125,101 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // Look up the student record so we can link a login account
+    const student = await pool.query(
+      `SELECT * FROM students 
+       WHERE student_id = $1 OR student_code = $1`,
+      [student_id]
+    );
+    
+    let studentData = student.rows[0];
+    
+    if (!studentData) {
+      // Optionally create a minimal student record so the account is usable
+      const nameParts = String(student_name || '').split(' ').filter(Boolean);
+      const newStudent = await pool.query(
+        `INSERT INTO students (
+          student_id, student_code, first_name, last_name,
+          date_of_birth, gender, district, parent_name, parent_phone,
+          parent_relationship, current_standard, current_class,
+          academic_year, enrollment_status, emergency_contact_name,
+          emergency_contact_phone, total_fees
+        ) VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7, $8, $9,
+          $10, $11, $12, $13, $14, $15, $16, $17
+        ) RETURNING *`,
+        [
+          student_id,
+          student_code || student_id,
+          nameParts[0] || student_name || 'Student',
+          nameParts.slice(1).join(' ') || student_name || '',
+          new Date().toISOString().split('T')[0],
+          'Male',
+          'Lilongwe',
+          'Parent Name',
+          '+265 888 123 456',
+          'Father',
+          1,
+          'A',
+          new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
+          'Active',
+          'Emergency Contact',
+          '+265 999 123 456',
+          0
+        ]
+      );
+      studentData = newStudent.rows[0];
+    }
+    
+    // If the student record already has a linked user account, reject
+    if (studentData.user_id) {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'This student already has a login account. Use "Create Account" flow or edit the user.' 
+      });
+    }
+    
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
+    
+    // Build consistent unique username/email
+    const allUsernames = [
+      ...(await pool.query('SELECT username FROM users WHERE username IS NOT NULL')).rows.map((row) => row.username).filter(Boolean),
+      ...(await pool.query('SELECT username FROM student_credentials WHERE username IS NOT NULL')).rows.map((row) => row.username).filter(Boolean)
+    ];
+    const allEmails = [
+      ...(await pool.query('SELECT email FROM users WHERE email IS NOT NULL')).rows.map((row) => row.email).filter(Boolean),
+      ...(await pool.query('SELECT email FROM student_credentials WHERE email IS NOT NULL')).rows.map((row) => row.email).filter(Boolean)
+    ];
+    const nameParts = String(studentData.first_name + ' ' + studentData.last_name).trim().split(' ').filter(Boolean);
+    const identity = buildStudentAccountIdentity({
+      studentId: studentData.student_id,
+      firstName: nameParts[0],
+      lastName: nameParts.slice(1).join(' '),
+      username,
+      email,
+      existingUsernames: allUsernames,
+      existingEmails: allEmails
+    });
+    const finalUsername = identity.username;
+    const finalEmail = identity.email;
+    
+    // Create the user account so the student can actually log in
+    const userResult = await pool.query(
+      `INSERT INTO users (username, email, password_hash, password_plain, first_name, last_name,
+                          role, is_student, student_id, phone, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, username, email, role, is_student, student_id, is_active`,
+      [finalUsername, finalEmail, password_hash, password, studentData.first_name, studentData.last_name,
+       'student', true, studentData.student_id, studentData.phone || null, true]
+    );
+    
+    // Link the user to the student
+    await pool.query(
+      'UPDATE students SET user_id = $1 WHERE student_id = $2',
+      [userResult.rows[0].id, studentData.student_id]
+    );
     
     const result = await pool.query(`
       INSERT INTO student_credentials (
@@ -139,7 +233,7 @@ router.post('/', async (req, res) => {
         created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [student_id, student_code, student_name, username, email, password_hash, password, created_by || null]);
+    `, [studentData.student_id, studentData.student_code, `${studentData.first_name} ${studentData.last_name}`, finalUsername, finalEmail, password_hash, password, created_by || userResult.rows[0].id]);
     
     const credential = {
       id: result.rows[0].id,
@@ -155,7 +249,7 @@ router.post('/', async (req, res) => {
     
     res.status(201).json({
       success: true,
-      message: 'Student credentials created successfully',
+      message: 'Student credentials created successfully and login account linked',
       credential
     });
     
@@ -253,10 +347,29 @@ router.delete('/:id', async (req, res) => {
       });
     }
     
+    const studentId = result.rows[0].student_id;
+    
+    // Clean up the linked user account and unlink the student record
+    const student = await pool.query(
+      'SELECT user_id FROM students WHERE student_id = $1',
+      [studentId]
+    );
+    
+    if (student.rows.length > 0 && student.rows[0].user_id) {
+      await pool.query(
+        'UPDATE students SET user_id = NULL WHERE student_id = $1',
+        [studentId]
+      );
+      await pool.query(
+        'DELETE FROM users WHERE id = $1',
+        [student.rows[0].user_id]
+      );
+    }
+    
     res.json({
       success: true,
       message: 'Credentials deleted successfully',
-      student_id: result.rows[0].student_id
+      student_id: studentId
     });
     
   } catch (error) {
