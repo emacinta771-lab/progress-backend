@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const { buildStudentAccountIdentity } = require('../utils/accountIdentity');
 const { verifyPassword } = require('../utils/password');
+const { normalizeUserRole } = require('../utils/roles');
 
 // ==========================================
 // TEST ROUTE
@@ -264,6 +265,7 @@ router.post('/register', async (req, res) => {
   console.log('📝 Registration request received:', req.body);
   
   const { username, email, password, first_name, last_name, role } = req.body;
+  const normalizedRole = normalizeUserRole(role);
 
   if (!username || !email || !password || !first_name || !last_name) {
     return res.status(400).json({
@@ -292,7 +294,7 @@ router.post('/register', async (req, res) => {
       `INSERT INTO users (username, email, password_hash, password_plain, first_name, last_name, role)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, username, email, first_name, last_name, role, is_active, created_at`,
-      [username, email, password_hash, password, first_name, last_name, role || 'teacher']
+      [username, email, password_hash, password, first_name, last_name, normalizedRole]
     );
     
     console.log('✅ User created successfully:', result.rows[0]);
