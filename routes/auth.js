@@ -583,7 +583,6 @@ router.post('/create-student-account', async (req, res) => {
         password: password
       }
     });
-    
   } catch (error) {
     console.error('❌ Error creating student account:', error);
     res.status(500).json({ 
@@ -591,6 +590,98 @@ router.post('/create-student-account', async (req, res) => {
       error: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  }
+});
+
+// ==========================================
+// 👨‍🏫 CREATE TEACHER ACCOUNT WITH LOGIN CREDENTIALS
+// ==========================================
+router.post('/create-teacher-account', async (req, res) => {
+  console.log('📝 Creating teacher account:', req.body);
+
+  try {
+    let { teacher_id, email, username, password } = req.body;
+
+    if (!password || (!teacher_id && !email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password and either teacher ID or email are required'
+      });
+    }
+
+    const teacherQuery = await pool.query(
+      `SELECT * FROM teachers WHERE teacher_id = $1 OR email = $2`,
+      [teacher_id || null, email || null]
+    );
+
+    if (teacherQuery.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Teacher not found. Please create the teacher record first.'
+      });
+    }
+
+    const teacher = teacherQuery.rows[0];
+
+    if (teacher.user_id) {
+      return res.status(409).json({
+        success: false,
+        error: 'This teacher already has a login account.'
+      });
+    }
+
+    const existingUsernames = [
+      ...(await pool.query('SELECT username FROM users WHERE username IS NOT NULL')).rows.map((row) => row.username).filter(Boolean),
+      ...(await pool.query('SELECT username FROM student_credentials WHERE username IS NOT NULL')).rows.map((row) => row.username).filter(Boolean)
+    ];
+    const existingEmails = [
+      ...(await pool.query('SELECT email FROM users WHERE email IS NOT NULL')).rows.map((row) => row.email).filter(Boolean),
+      ...(await pool.query('SELECT email FROM student_credentials WHERE email IS NOT NULL')).rows.map((row) => row.email).filter(Boolean)
+    ];
+
+    const identity = buildStudentAccountIdentity({
+      studentId: teacher.teacher_id,
+      firstName: teacher.first_name,
+      lastName: teacher.last_name,
+      username,
+      email: email || teacher.email,
+      existingUsernames,
+      existingEmails
+    });
+
+    const finalUsername = identity.username;
+    const finalEmail = identity.email;
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    const userResult = await pool.query(
+      `INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_student, phone, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, username, email, first_name, last_name, role, is_student`,
+      [finalUsername, finalEmail, password_hash, teacher.first_name, teacher.last_name, 'teacher', false, teacher.phone || null, true]
+    );
+
+    await pool.query(
+      'UPDATE teachers SET user_id = $1 WHERE teacher_id = $2',
+      [userResult.rows[0].id, teacher.teacher_id]
+    );
+
+    console.log('✅ Teacher account created successfully:', userResult.rows[0]);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Teacher login account created successfully.',
+      user: userResult.rows[0],
+      credentials: {
+        username: finalUsername,
+        email: finalEmail,
+        password
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error creating teacher account:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
