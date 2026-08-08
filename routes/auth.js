@@ -6,6 +6,7 @@ const pool = require('../config/database');
 const { buildStudentAccountIdentity } = require('../utils/accountIdentity');
 const { verifyPassword } = require('../utils/password');
 const { normalizeUserRole } = require('../utils/roles');
+const { verifyToken, checkRole } = require('../middleware/auth');
 
 // ==========================================
 // TEST ROUTE
@@ -232,7 +233,7 @@ router.get('/me', async (req, res) => {
 // ==========================================
 // 📋 GET ALL USERS (Admin only)
 // ==========================================
-router.get('/users', async (req, res) => {
+router.get('/users', verifyToken, checkRole('admin'), async (req, res) => {
   console.log('📋 Users list request received');
   
   try {
@@ -261,7 +262,7 @@ router.get('/users', async (req, res) => {
 // ==========================================
 // 📝 REGISTER NEW USER (Admin only)
 // ==========================================
-router.post('/register', async (req, res) => {
+router.post('/register', verifyToken, checkRole('admin'), async (req, res) => {
   console.log('📝 Registration request received:', req.body);
   
   const { username, email, password, first_name, last_name, role } = req.body;
