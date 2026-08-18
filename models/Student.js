@@ -89,7 +89,11 @@ class Student {
         emergency_contact_name, emergency_contact_phone,
         emergency_contact_relationship, total_fees, amount_paid,
         outstanding_balance, fee_payment_plan, scholarship_type,
-        financial_hold, has_uniform, has_textbooks, meals_program, notes
+        financial_hold, has_uniform, has_textbooks, meals_program, notes,
+        // ── new fields ──
+        lin_code, age, location, religious_denomination,
+        orphan_status, special_needs, special_needs_description,
+        ecd_attendance, submission_date
       } = studentData;
 
       // Validate required fields
@@ -106,34 +110,37 @@ class Student {
         }
       }
 
-      // Check if student_code already exists
+      // Check duplicates
       const existing = await pool.query(
         'SELECT student_code FROM students WHERE student_code = $1',
         [student_code]
       );
+      if (existing.rows.length > 0) throw new Error('Student Code already exists');
 
-      if (existing.rows.length > 0) {
-        throw new Error('Student Code already exists');
-      }
-
-      // Check if student_id already exists
       const existingId = await pool.query(
         'SELECT student_id FROM students WHERE student_id = $1',
         [student_id]
       );
+      if (existingId.rows.length > 0) throw new Error('Student ID already exists');
 
-      if (existingId.rows.length > 0) {
-        throw new Error('Student ID already exists');
+      if (lin_code) {
+        const existingLin = await pool.query(
+          'SELECT lin_code FROM students WHERE lin_code = $1',
+          [lin_code]
+        );
+        if (existingLin.rows.length > 0) throw new Error('LIN Code already exists');
       }
 
-      // Set default values
-      const finalEnrollmentDate = enrollment_date || new Date().toISOString().split('T')[0];
-      const finalEnrollmentStatus = enrollment_status || 'Active';
-      const finalPreviousGradePromoted = previous_grade_promoted !== undefined ? previous_grade_promoted : true;
-      const finalPerformanceLevel = performance_level || 'Satisfactory';
-      const finalAmountPaid = parseFloat(amount_paid) || 0;
-      const finalOutstandingBalance = outstanding_balance !== undefined ? parseFloat(outstanding_balance) : (parseFloat(total_fees) || 0);
-      const finalFinancialHold = financial_hold !== undefined ? financial_hold : false;
+      // Defaults
+      const finalEnrollmentDate       = enrollment_date || new Date().toISOString().split('T')[0];
+      const finalEnrollmentStatus     = enrollment_status || 'Active';
+      const finalPreviousGradePromoted= previous_grade_promoted !== undefined ? previous_grade_promoted : true;
+      const finalPerformanceLevel     = performance_level || 'Satisfactory';
+      const finalAmountPaid           = parseFloat(amount_paid) || 0;
+      const finalOutstandingBalance   = outstanding_balance !== undefined
+        ? parseFloat(outstanding_balance)
+        : (parseFloat(total_fees) || 0);
+      const finalFinancialHold        = financial_hold !== undefined ? financial_hold : false;
 
       const result = await pool.query(
         `INSERT INTO students (
@@ -147,51 +154,40 @@ class Student {
           emergency_contact_name, emergency_contact_phone,
           emergency_contact_relationship, total_fees, amount_paid,
           outstanding_balance, fee_payment_plan, scholarship_type,
-          financial_hold, has_uniform, has_textbooks, meals_program, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
-        RETURNING *`,
+          financial_hold, has_uniform, has_textbooks, meals_program, notes,
+          lin_code, age, location, religious_denomination,
+          orphan_status, special_needs, special_needs_description,
+          ecd_attendance, submission_date
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+          $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+          $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
+          $41,$42,$43,$44,$45,$46,$47,$48,$49,$50
+        ) RETURNING *`,
         [
-          student_code,
-          student_id, 
-          first_name, 
-          last_name, 
-          middle_name || null,
-          date_of_birth, 
-          gender, 
-          phone || null, 
-          village || null, 
-          traditional_authority || null,
-          district, 
-          division || null, 
-          parent_name, 
-          parent_phone, 
-          parent_email || null,
-          parent_occupation || null, 
-          parent_relationship, 
-          parent_village || null,
-          parseInt(current_standard), 
-          current_class || null, 
-          finalEnrollmentDate, 
-          academic_year,
-          finalEnrollmentStatus, 
-          finalPreviousGradePromoted, 
-          finalPerformanceLevel,
-          blood_type || null, 
-          allergies || null, 
-          medical_conditions || null,
-          emergency_contact_name, 
-          emergency_contact_phone, 
-          emergency_contact_relationship || null,
-          parseFloat(total_fees) || 0, 
-          finalAmountPaid, 
-          finalOutstandingBalance,
-          fee_payment_plan || 'Full', 
-          scholarship_type || 'None',
-          finalFinancialHold, 
-          has_uniform || false, 
-          has_textbooks || false,
-          meals_program || 'None', 
-          notes || null
+          student_code, student_id, first_name, last_name, middle_name || null,
+          date_of_birth, gender, phone || null, village || null, traditional_authority || null,
+          district, division || null, parent_name, parent_phone, parent_email || null,
+          parent_occupation || null, parent_relationship, parent_village || null,
+          parseInt(current_standard), current_class || null, finalEnrollmentDate, academic_year,
+          finalEnrollmentStatus, finalPreviousGradePromoted, finalPerformanceLevel,
+          blood_type || null, allergies || null, medical_conditions || null,
+          emergency_contact_name, emergency_contact_phone, emergency_contact_relationship || null,
+          parseFloat(total_fees) || 0, finalAmountPaid, finalOutstandingBalance,
+          fee_payment_plan || 'Full', scholarship_type || 'None',
+          finalFinancialHold, has_uniform || false, has_textbooks || false,
+          meals_program || 'None', notes || null,
+          // new fields
+          lin_code || null,
+          age ? parseInt(age) : null,
+          location || null,
+          religious_denomination || null,
+          orphan_status || 'None',
+          special_needs || false,
+          special_needs_description || null,
+          ecd_attendance || 'No',
+          submission_date || new Date().toISOString().split('T')[0]
         ]
       );
       
@@ -267,6 +263,7 @@ class Student {
            last_name ILIKE $1 OR 
            student_code ILIKE $1 OR
            student_id ILIKE $1 OR
+           lin_code ILIKE $1 OR
            parent_name ILIKE $1 OR
            district ILIKE $1
          ORDER BY created_at DESC`,
@@ -392,7 +389,11 @@ class Student {
         'emergency_contact_name', 'emergency_contact_phone',
         'emergency_contact_relationship', 'fee_payment_plan',
         'scholarship_type', 'has_uniform', 'has_textbooks', 'meals_program',
-        'notes', 'performance_level', 'financial_hold'
+        'notes', 'performance_level', 'financial_hold',
+        // new fields
+        'lin_code', 'age', 'location', 'religious_denomination',
+        'orphan_status', 'special_needs', 'special_needs_description',
+        'ecd_attendance', 'submission_date'
       ];
 
       const setClause = [];
