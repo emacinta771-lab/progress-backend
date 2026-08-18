@@ -51,7 +51,7 @@ pool.connect((err, client, release) => {
           SELECT table_name 
           FROM information_schema.tables 
           WHERE table_schema = 'public' 
-          AND table_name IN ('students', 'users', 'payments')
+          AND table_name IN ('students', 'users', 'payments', 'attendance')
         `);
       })
       .then((result) => {
@@ -117,6 +117,20 @@ pool.connect((err, client, release) => {
               last_login TIMESTAMP
             )
           `),
+          client.query(`
+            CREATE TABLE IF NOT EXISTS attendance (
+              id SERIAL PRIMARY KEY,
+              student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+              date DATE NOT NULL,
+              status VARCHAR(20) NOT NULL DEFAULT 'Present',
+              check_in_time TIME,
+              check_out_time TIME,
+              notes TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE (student_id, date)
+            )
+          `),
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_student BOOLEAN DEFAULT FALSE`),
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id VARCHAR(100)`),
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`),
@@ -125,7 +139,18 @@ pool.connect((err, client, release) => {
           client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_plain VARCHAR(255)`),
           client.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS user_id INTEGER`),
           client.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_email VARCHAR(255)`),
-          client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS user_id INTEGER`)
+          client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS user_id INTEGER`),
+          client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS assigned_standard INTEGER`),
+          client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS assigned_class VARCHAR(50)`),
+          client.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS assigned_academic_year VARCHAR(50)`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Present'`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_in_time TIME`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_out_time TIME`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS notes TEXT`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`),
+          client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`),
+          client.query(`ALTER TABLE attendance ALTER COLUMN date TYPE DATE USING date::date`),
+          client.query(`CREATE UNIQUE INDEX IF NOT EXISTS attendance_student_date_key ON attendance (student_id, date)`)
         ]);
       })
       .then(() => {

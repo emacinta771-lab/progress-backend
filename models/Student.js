@@ -446,15 +446,77 @@ class Student {
   // DELETE STUDENT
   // ==========================================
   static async delete(studentId) {
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
-        'DELETE FROM students WHERE student_id = $1 RETURNING *',
-        [studentId]
+      await client.query('BEGIN');
+
+      const studentResult = await client.query(
+        `SELECT id, student_id
+         FROM students
+         WHERE student_id = $1 OR CAST(id AS TEXT) = $1
+         LIMIT 1`,
+        [String(studentId)]
       );
-      return result.rows[0];
+
+      if (studentResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const target = studentResult.rows[0];
+
+      const tableExists = async (tableName) => {
+        const existsResult = await client.query(
+          `SELECT EXISTS (
+             SELECT 1
+             FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = $1
+           ) AS exists`,
+          [tableName]
+        );
+        return Boolean(existsResult.rows[0]?.exists);
+      };
+
+      // Remove dependent rows first for databases without ON DELETE CASCADE.
+      if (await tableExists('payments')) {
+        await client.query('DELETE FROM payments WHERE student_id = $1', [target.id]);
+      }
+      if (await tableExists('grades')) {
+        await client.query('DELETE FROM grades WHERE student_id = $1', [target.id]);
+      }
+      if (await tableExists('attendance')) {
+        await client.query('DELETE FROM attendance WHERE student_id = $1', [target.id]);
+      }
+      if (await tableExists('receipt_repository')) {
+        await client.query('DELETE FROM receipt_repository WHERE student_id = $1', [target.id]);
+      }
+      if (await tableExists('notifications')) {
+        await client.query('DELETE FROM notifications WHERE student_id = $1', [target.id]);
+      }
+      if (await tableExists('student_credentials')) {
+        await client.query('DELETE FROM student_credentials WHERE student_id = $1', [target.student_id]);
+      }
+      // Unlink user account (don't delete the user — just detach)
+      if (await tableExists('users')) {
+        await client.query(
+          `UPDATE users SET student_id = NULL, is_student = FALSE WHERE student_id = $1`,
+          [target.student_id]
+        );
+      }
+
+      const result = await client.query(
+        'DELETE FROM students WHERE id = $1 RETURNING *',
+        [target.id]
+      );
+
+      await client.query('COMMIT');
+      return result.rows[0] || null;
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('❌ Error in delete:', error);
       throw error;
+    } finally {
+      client.release();
     }
   }
 
