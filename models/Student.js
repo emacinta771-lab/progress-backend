@@ -44,8 +44,9 @@ class Student {
             '[]'
           ) as recent_payments
         FROM students s 
-        WHERE s.student_id = $1
-      `, [studentId]);
+        WHERE s.student_id = $1 OR CAST(s.id AS TEXT) = $1
+        LIMIT 1
+      `, [String(studentId)]);
       return result.rows[0];
     } catch (error) {
       console.error('❌ Error in findById:', error);

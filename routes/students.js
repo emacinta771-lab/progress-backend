@@ -401,6 +401,27 @@ router.get('/standard/:standard', async (req, res) => {
 });
 
 // ==========================================
+// SEARCH STUDENTS
+// ==========================================
+router.get('/search/:query', async (req, res) => {
+  try {
+    console.log(`🔍 Searching for: ${req.params.query}`);
+    const students = await Student.search(req.params.query);
+    res.json({ 
+      success: true, 
+      count: students.length,
+      students 
+    });
+  } catch (error) {
+    console.error('❌ Error searching students:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// ==========================================
 // GET STUDENT BY ID
 // ==========================================
 router.get('/:studentId', async (req, res) => {
@@ -415,27 +436,6 @@ router.get('/:studentId', async (req, res) => {
     res.json({ success: true, student });
   } catch (error) {
     console.error('❌ Error fetching student:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// ==========================================
-// SEARCH STUDENTS
-// ==========================================
-router.get('/search/:query', async (req, res) => {
-  try {
-    console.log(`🔍 Searching for: ${req.params.query}`);
-    const students = await Student.search(req.params.query);
-    res.json({ 
-      success: true, 
-      count: students.length,
-      students 
-    });
-  } catch (error) {
-    console.error('❌ Error searching students:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
