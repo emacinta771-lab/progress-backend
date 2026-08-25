@@ -36,11 +36,29 @@ class Student {
         SELECT 
           s.*,
           COALESCE(
-            (SELECT json_agg(a) FROM attendance a WHERE a.student_id = s.id ORDER BY a.date DESC LIMIT 10),
+            (
+              SELECT json_agg(recent_attendance_row ORDER BY recent_attendance_row.date DESC)
+              FROM (
+                SELECT a.*
+                FROM attendance a
+                WHERE a.student_id = s.id
+                ORDER BY a.date DESC
+                LIMIT 10
+              ) AS recent_attendance_row
+            ),
             '[]'
           ) as recent_attendance,
           COALESCE(
-            (SELECT json_agg(p) FROM payments p WHERE p.student_id = s.id ORDER BY p.payment_date DESC LIMIT 5),
+            (
+              SELECT json_agg(recent_payment_row ORDER BY recent_payment_row.payment_date DESC)
+              FROM (
+                SELECT p.*
+                FROM payments p
+                WHERE p.student_id = s.id
+                ORDER BY p.payment_date DESC
+                LIMIT 5
+              ) AS recent_payment_row
+            ),
             '[]'
           ) as recent_payments
         FROM students s 

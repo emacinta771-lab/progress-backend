@@ -124,7 +124,16 @@ router.get('/stats/overview', async (req, res) => {
         
         -- Financial stats
         COUNT(CASE WHEN financial_hold = true THEN 1 END) as financial_holds,
-        COALESCE(SUM(outstanding_balance), 0) as total_outstanding_balance,
+        COALESCE(SUM(
+          GREATEST(
+            CASE
+              WHEN outstanding_balance IS NULL OR outstanding_balance <= 0
+                THEN COALESCE(total_fees, 0) - COALESCE(amount_paid, 0)
+              ELSE outstanding_balance
+            END,
+            0
+          )
+        ), 0) as total_outstanding_balance,
         COALESCE(SUM(total_fees), 0) as total_fees_collected,
         COALESCE(SUM(amount_paid), 0) as total_amount_paid,
         
